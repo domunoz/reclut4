@@ -1,5 +1,7 @@
 #coding:utf-8
+import datetime
 from django.contrib import admin
+from django.utils.datastructures import MultiValueDictKeyError
 from daterange_filter.filter import DateRangeFilter
 from models import Postulante, Instalacion, Contratado, Supervisor, Cliente, Comuna, Region, Medio
 # Register your models here.
@@ -32,15 +34,61 @@ class ContratadoAdmin(admin.ModelAdmin):
 
 
 class MedioAdmin(admin.ModelAdmin):
-    list_display = ('nombre', 'total_postulantes', 'contratados', )
+    fields = ('nombre', )
+    list_display = ('nombre', 'contratados', 'postulantes', 
+'contratados_total', 'postulantes_total',) 
+    list_filter = (('postulantes_ingresados__fecha', DateRangeFilter),)
 
-    def total_postulantes(self, obj):
-   #     return obj.nombre
-        return Postulante.objects.filter(medio1=obj).count()
+
+    def postulantes(self, obj):
+        total_postulantes = Postulante.objects.filter(medio1=obj,
+fecha__gte=self.from_date, fecha__lte=self.to_date).count()
+        obj.total_postulantes = total_postulantes
+        obj.save()
+        return obj.total_postulantes
+
+    def postulantes_total(self, obj):
+        return Postulante.objects.filter(fecha__gte=self.from_date, 
+fecha__lte=self.to_date).count()
 
     def contratados(self, obj):
-        return Postulante.objects.filter(medio1=obj, contratado=True).count()       
-      
+        total_contratado = Postulante.objects.filter(medio1=obj,
+fecha__gte=self.from_date, fecha__lte=self.to_date,contratado=True).count()
+        obj.total_contratado = total_contratado
+        obj.save()
+        return obj.total_contratado
+
+
+    def contratados_total(self, obj):
+        return Postulante.objects.filter(contratado=True, fecha__gte=self.from_date, fecha__lte=self.to_date).count()
+
+
+    def changelist_view(self, request, extra_context=None):
+        try:
+            self.from_date = request.GET['postulantes_ingresados__fecha__gte']
+            self.to_date = request.GET['postulantes_ingresados__fecha__lte']
+
+
+            try:
+                self.from_date = datetime.datetime.strptime(self.from_date, '%d-%m-%y').strftime('%Y-%m-%d')  
+            except ValueError:
+                self.from_date = datetime.datetime(2014,11,01)
+   
+
+            try:
+                self.to_date = datetime.datetime.strptime(self.to_date, '%d-%m-%y').strftime('%Y-%m-%d')  
+            except ValueError:
+                self.to_date= datetime.datetime.now().date()
+        
+        except MultiValueDictKeyError:
+            self.from_date = datetime.datetime(2014,11,01)
+            self.to_date = datetime.datetime.now().date()
+
+        return super(MedioAdmin, self).changelist_view(request, extra_context=None) 
+
+    postulantes.admin_order_field = 'total_postulantes'
+    contratados.admin_order_field = 'total_contratado'
+
 
 
 admin.site.register(Postulante, PostulanteAdmin)
